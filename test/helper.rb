@@ -56,6 +56,10 @@ def rebuild_model options = {}
     table.column :avatar_content_type, :string
     table.column :avatar_file_size, :integer
     table.column :avatar_updated_at, :datetime
+    
+    table.column :access_key_id, :string
+    table.column :secret_access_key, :string
+    table.column :bucket, :string
   end
   rebuild_class options
 end

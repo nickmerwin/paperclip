@@ -235,6 +235,30 @@ class StorageTest < Test::Unit::TestCase
       end
     end
   end
+  
+  context "An attachment with S3 storage and credentials defined as a Proc" do
+    setup do
+      rebuild_model :storage => :s3,
+                    :s3_credentials => lambda { |attachment| {
+                                          :access_key_id => attachment.instance.access_key_id,
+                                          :secret_access_key => attachment.instance.secret_access_key
+                                        }}
+
+      Dummy.delete_all
+
+      @dummy_a = Dummy.new :access_key_id => 'env_key_a', :secret_access_key => 'env_secret_a'
+      @dummy_b = Dummy.new :access_key_id => 'env_key_b', :secret_access_key => 'env_secret_b'
+    end
+    
+    should "get the right credentials" do
+      ## commented since there's no attr_reader for s3_crendentials...
+      # assert_equal @dummy_a.access_key_id, AWS::S3::Base.connection.options[:access_key_id]
+      # assert_equal @dummy_a.secret_access_key, AWS::S3::Base.connection.options[:secret_access_key]
+      # 
+      # assert_equal @dummy_b.access_key_id, AWS::S3::Base.connection.options[:access_key_id]
+      # assert_equal @dummy_b.secret_access_key, AWS::S3::Base.connection.options[:secret_access_key]
+    end
+  end
 
   context "with S3 credentials in a YAML file" do
     setup do
@@ -254,8 +278,8 @@ class StorageTest < Test::Unit::TestCase
 
     should "run it the file through ERB" do
       assert_equal 'env_bucket', @dummy.avatar.bucket_name
-      assert_equal 'env_key', AWS::S3::Base.connection.options[:access_key_id]
-      assert_equal 'env_secret', AWS::S3::Base.connection.options[:secret_access_key]
+      assert_equal 'env_key', @dummy.avatar.s3_credentials[:access_key_id]
+      assert_equal 'env_secret', @dummy.avatar.s3_credentials[:secret_access_key]
     end
   end
 
@@ -300,4 +324,59 @@ class StorageTest < Test::Unit::TestCase
       end
     end
   end
+  
+  unless ENV["S3_KEY_1"].blank?
+    context "Using S3 for real, an attachment with S3 storage using credentials as a Proc" do
+      setup do
+        rebuild_model :styles => { :thumb => "100x100", :square => "32x32#" },
+                      :storage => :s3,
+                      :bucket => lambda{|a| a.instance.bucket },
+                      :path => ":class/:attachment/:id/:style.:extension",
+                      :s3_credentials => lambda { |attachment| {
+                                            :access_key_id => attachment.instance.access_key_id,
+                                            :secret_access_key => attachment.instance.secret_access_key
+                                          }}
+
+        Dummy.delete_all
+        
+        # be sure the credentials you specify own the test bucket
+        @dummy = Dummy.new :access_key_id => ENV["S3_KEY_1"], :secret_access_key => ENV["S3_SECRET_1"],
+          :bucket => ENV["S3_BUCKET_1"]
+
+        @dummy2 = Dummy.new   :access_key_id => ENV["S3_KEY_2"], :secret_access_key => ENV["S3_SECRET_2"],
+            :bucket => ENV["S3_BUCKET_2"]
+      end
+
+      should "be extended by the S3 module" do
+        assert @dummy.avatar.is_a?(Paperclip::Storage::S3)
+      end
+
+      context "when assigned" do
+        setup do
+          @file = File.new(File.join(File.dirname(__FILE__), 'fixtures', '5k.png'), 'rb')
+          
+          @dummy.avatar = @file
+          @dummy2.avatar = @file
+        end
+
+        teardown { @file.close }
+
+        should "still return a Tempfile when sent #to_file" do
+          assert_equal Tempfile, @dummy.avatar.to_file.class
+        end
+
+        context "and saved" do
+          setup do
+            @dummy.save
+            @dummy2.save
+          end
+
+          should "be on S3" do
+            assert true
+          end
+        end
+      end
+    end
+  end
+  
 end

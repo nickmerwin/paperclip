@@ -72,7 +72,7 @@ module Paperclip
     # Amazon's S3 file hosting service is a scalable, easy place to store files for
     # distribution. You can find out more about it at http://aws.amazon.com/s3
     # There are a few S3-specific options for has_attached_file:
-    # * +s3_credentials+: Takes a path, a File, or a Hash. The path (or File) must point
+    # * +s3_credentials+: Takes a path, a File, a Hash, or a Proc. The path (or File) must point
     #   to a YAML file containing the +access_key_id+ and +secret_access_key+ that Amazon
     #   gives you. You can 'environment-space' this just like you do to your
     #   database.yml file, so different environments can use different accounts:
@@ -133,7 +133,7 @@ module Paperclip
           e.message << " (You may need to install the aws-s3 gem)"
           raise e
         end
-
+        
         base.instance_eval do
           @s3_credentials = parse_credentials(@options[:s3_credentials])
           @bucket         = @options[:bucket]         || @s3_credentials[:bucket]
@@ -144,10 +144,6 @@ module Paperclip
           @s3_headers     = @options[:s3_headers]     || {}
           @s3_host_alias  = @options[:s3_host_alias]
           @url            = ":s3_path_url" unless @url.to_s.match(/^:s3.*url$/)
-          AWS::S3::Base.establish_connection!( @s3_options.merge(
-            :access_key_id => @s3_credentials[:access_key_id],
-            :secret_access_key => @s3_credentials[:secret_access_key]
-          ))
         end
         Paperclip.interpolates(:s3_alias_url) do |attachment, style|
           "#{attachment.s3_protocol}://#{attachment.s3_host_alias}/#{attachment.path(style).gsub(%r{^/}, "")}"
@@ -157,6 +153,19 @@ module Paperclip
         end
         Paperclip.interpolates(:s3_domain_url) do |attachment, style|
           "#{attachment.s3_protocol}://#{attachment.bucket_name}.s3.amazonaws.com/#{attachment.path(style).gsub(%r{^/}, "")}"
+        end
+        
+      end
+      
+      attr_reader :s3_credentials
+      def establish_s3_connection
+        if !AWS::S3::Base.connected? || (AWS::S3::Base.connection.options[:access_key_id] != @s3_credentials[:access_key_id] ||
+          AWS::S3::Base.connection.options[:secret_access_key] != @s3_credentials[:secret_access_key])
+
+          AWS::S3::Base.establish_connection!( @s3_options.merge(
+            :access_key_id => @s3_credentials[:access_key_id],
+            :secret_access_key => @s3_credentials[:secret_access_key]
+          ))
         end
       end
 
@@ -196,6 +205,7 @@ module Paperclip
       end
 
       def flush_writes #:nodoc:
+        establish_s3_connection
         @queued_for_write.each do |style, file|
           begin
             log("saving #{path(style)}")
@@ -232,8 +242,10 @@ module Paperclip
           YAML::load(ERB.new(File.read(creds)).result)
         when Hash
           creds
+        when Proc
+          creds.call self
         else
-          raise ArgumentError, "Credentials are not a path, file, or hash."
+          raise ArgumentError, "Credentials are not a path, file, hash, or proc."
         end
       end
       private :find_credentials
