@@ -252,11 +252,11 @@ class StorageTest < Test::Unit::TestCase
     
     should "get the right credentials" do
       ## commented since there's no attr_reader for s3_crendentials...
-      # assert_equal @dummy_a.access_key_id, AWS::S3::Base.connection.options[:access_key_id]
-      # assert_equal @dummy_a.secret_access_key, AWS::S3::Base.connection.options[:secret_access_key]
-      # 
-      # assert_equal @dummy_b.access_key_id, AWS::S3::Base.connection.options[:access_key_id]
-      # assert_equal @dummy_b.secret_access_key, AWS::S3::Base.connection.options[:secret_access_key]
+      assert_equal @dummy_a.access_key_id, @dummy_a.avatar.s3_credentials[:access_key_id]
+      assert_equal @dummy_a.secret_access_key, @dummy_a.avatar.s3_credentials[:secret_access_key]
+      
+      assert_equal @dummy_b.access_key_id, @dummy_b.avatar.s3_credentials[:access_key_id]
+      assert_equal @dummy_b.secret_access_key, @dummy_b.avatar.s3_credentials[:secret_access_key]
     end
   end
 
